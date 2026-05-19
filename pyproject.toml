@@ -182,7 +182,6 @@ log_level = "DEBUG"
 [tool.hatch.metadata]
 allow-direct-references = true
 
-# ✅ 正确新版 uv 开发依赖（无警告、无语法错误）
 [dependency-groups]
 dev = [
     "ruff==0.14.14",
