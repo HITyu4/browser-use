@@ -30,7 +30,7 @@ async def main() -> None:
 	base_url = 'https://api.deepseek.com/v1'
 
 	if not api_key:
-		raise ValueError("请在 .env 文件中配置 DEEPSEEK_API_KEY")
+		raise ValueError('请在 .env 文件中配置 DEEPSEEK_API_KEY')
 
 	llm = ChatDeepSeek(
 		model='deepseek-chat',
@@ -56,7 +56,7 @@ async def main() -> None:
 
 	# 运行 agent
 	result = await agent.run(max_steps=10)
-	print(f"\n执行结果: {result}")
+	print(f'\n执行结果: {result}')
 
 
 if __name__ == '__main__':

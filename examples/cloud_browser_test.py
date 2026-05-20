@@ -33,7 +33,7 @@ async def main() -> None:
 	# 使用自己的 DeepSeek 模型
 	api_key = os.getenv('DEEPSEEK_API_KEY')
 	if not api_key:
-		raise ValueError("请在 .env 中配置 DEEPSEEK_API_KEY")
+		raise ValueError('请在 .env 中配置 DEEPSEEK_API_KEY')
 
 	llm = ChatDeepSeek(
 		model='deepseek-chat',
@@ -46,7 +46,7 @@ async def main() -> None:
 
 	# 创建 Agent
 	agent = Agent(
-		task="看看youtube网站有没有agent相关介绍视频",
+		task='看看youtube网站有没有agent相关介绍视频',
 		llm=llm,
 		browser=browser,
 		demo_mode=True,
@@ -54,7 +54,7 @@ async def main() -> None:
 
 	# 运行 agent
 	result = await agent.run(max_steps=10)
-	print(f"\n执行结果: {result}")
+	print(f'\n执行结果: {result}')
 
 
 if __name__ == '__main__':

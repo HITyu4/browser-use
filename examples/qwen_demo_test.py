@@ -52,7 +52,7 @@ async def main() -> None:
 
 	# 运行 agent
 	result = await agent.run(max_steps=10)
-	print(f"\n执行结果: {result}")
+	print(f'\n执行结果: {result}')
 
 
 if __name__ == '__main__':
