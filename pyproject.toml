@@ -47,6 +47,15 @@ dependencies = [
     "python-docx==1.2.0",
     "browser-use-sdk==3.4.2",
 ]
+# google-api-core: only used for Google LLM APIs
+# pyperclip: only used for examples that use copy/paste
+# pyobjc: only used to get screen resolution on macOS
+# screeninfo: only used to get screen resolution on Linux/Windows
+# markdownify: used for page text content extraction for passing to LLM
+# openai: datalib,voice-helpers are actually NOT NEEDED but openai produces noisy errors on exit without them TODO: fix
+# rich: used for terminal formatting and styling in CLI
+# click: used for command-line argument parsing
+# textual: used for terminal UI
 
 [project.optional-dependencies]
 cli = ["textual==7.4.0"]
@@ -55,8 +64,11 @@ oci = ["oci==2.166.0"]
 video = ["imageio[ffmpeg]==2.37.2", "numpy==2.4.1"]
 examples = [
     "agentmail==0.0.59",
+    # botocore: only needed for Bedrock Claude boto3 examples/models/bedrock_claude.py
     "botocore==1.42.37",
     "imgcat==0.6.0",
+    # "stagehand-py>=0.3.6",
+    # "browserbase>=0.4.0",
     "langchain-openai==1.1.7",
 ]
 eval = [
@@ -68,6 +80,11 @@ eval = [
 cli-oci = ["browser-use[cli,oci]"]
 all = ["browser-use[cli,examples,aws,oci]"]
 
+# will prefer to use local source code checked out in ../../browser-use (if present) instead of pypi browser-use package
+# [tool.uv.sources]
+# bubus = { path = "../bubus", editable = true }
+
+
 [project.urls]
 Homepage = "https://browser-use.com"
 Documentation = "https://docs.browser-use.com"
@@ -77,15 +94,16 @@ Telemetry = "https://docs.browser-use.com/development/monitoring/telemetry"
 "Privacy Policy" = "https://browser-use.com/privacy/"
 
 [project.scripts]
-browser-use = "browser_use.skill_cli.main:main"
-browseruse = "browser_use.skill_cli.main:main"
-bu = "browser_use.skill_cli.main:main"
-browser = "browser_use.skill_cli.main:main"
-browser-use-tui = "browser_use.cli:main"
+browser-use = "browser_use.skill_cli.main:main"  # Fast CLI for browser automation
+browseruse = "browser_use.skill_cli.main:main"  # Alias for browser-use
+bu = "browser_use.skill_cli.main:main"  # Alias for browser-use
+browser = "browser_use.skill_cli.main:main"  # Alias for browser-use
+browser-use-tui = "browser_use.cli:main"  # Legacy TUI interface
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
 
 [tool.codespell]
 ignore-words-list = "bu,wit,dont,cant,wont,re-use,re-used,re-using,re-usable,thats,doesnt,doubleclick,finaly,finalY"
@@ -105,11 +123,11 @@ ignore = [
     "F841",
     "E731",
     "W291",
-]
+] # TODO: determine if adding timeouts to all the unbounded async functions is needed / worth-it so we can un-ignore ASYNC109
 unfixable = ["E101", "E402", "E501", "F841", "E731"]
 
 [tool.ruff.format]
-quote-style = 'single'
+quote-style = "single"
 indent-style = "tab"
 line-ending = "lf"
 docstring-code-format = true
@@ -143,6 +161,7 @@ exclude = [
 venvPath = "."
 venv = ".venv"
 reportMissingTypeStubs = false
+
 
 [tool.hatch.build]
 include = [
@@ -179,11 +198,21 @@ filterwarnings = [
 ]
 log_level = "DEBUG"
 
+
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[dependency-groups]
-dev = [
+[tool.uv]
+# required-environments = [
+#     "sys_platform == 'darwin' and platform_machine == 'arm64'",
+#     "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+#     "sys_platform == 'linux' and platform_machine == 'x86_64'",
+#     "sys_platform == 'linux' and platform_machine == 'aarch64'",
+#     # "sys_platform == 'linux' and platform_machine == 'arm64'",  # no pytorch wheels available yet
+#     "sys_platform == 'win32' and platform_machine == 'x86_64'",
+#     # "sys_platform == 'win32' and platform_machine == 'arm64'",  # no pytorch wheels available yet
+# ]
+dev-dependencies = [
     "ruff==0.14.14",
     "tokencost==0.1.26",
     "build==1.4.0",
@@ -200,6 +229,7 @@ dev = [
     "ty==0.0.14",
     "pytest-xdist==3.8.0",
     "lmnr[all]==0.7.42",
+    # "pytest-playwright-asyncio>=0.7.0",  # not actually needed I think
     "pytest-timeout==2.4.0",
     "pydantic_settings==2.12.0",
 ]
