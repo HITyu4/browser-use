@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from cdp_use.cdp.accessibility.commands import GetFullAXTreeReturns
@@ -66,6 +68,102 @@ class DomService:
 
 	async def __aexit__(self, exc_type, exc_value, traceback):
 		pass  # no need to cleanup anything, browser_session auto handles cleaning up session cache
+
+	# Class-level call counter for correlating CDP logs with LLM logs
+	_call_counter = 0
+
+	def _log_cdp_data(self, phase: str, data: Any) -> None:
+		"""Write CDP data to local log file for debugging."""
+		try:
+			log_dir = Path('/Users/hityu/Desktop/shizhan')
+			log_dir.mkdir(parents=True, exist_ok=True)
+			log_file = log_dir / 'cdp_debug.log'
+
+			timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+
+			# Increment call counter at the start of each DOM tree build (cdp_results phase)
+			if phase == 'cdp_results':
+				DomService._call_counter += 1
+				call_id = DomService._call_counter
+			else:
+				# Use the same call_id for subsequent phases
+				call_id = DomService._call_counter
+
+			with open(log_file, 'a', encoding='utf-8') as f:
+				f.write(f'\n{"=" * 60}\n')
+				f.write(f'[{timestamp}] DomService.{phase} [Call #{call_id}]\n')
+				f.write(f'{"=" * 60}\n')
+
+				if phase == 'cdp_results':
+					# Log CDP raw results
+					dom_tree = data.get('dom_tree', {})
+					# dom_tree structure varies by CDP call, inspect it directly
+					if isinstance(dom_tree, dict):
+						if 'root' in dom_tree:
+							root = dom_tree['root']
+							f.write(f'\n--- DOM Tree Root ---\n')
+							f.write(f'nodeId: {root.get("nodeId", "N/A")}\n')
+							f.write(f'backendNodeId: {root.get("backendNodeId", "N/A")}\n')
+							f.write(f'nodeName: {root.get("nodeName", "N/A")}\n')
+							f.write(f'childCount: {len(root.get("children", [])) if "children" in root else "N/A"}\n')
+						else:
+							# Maybe structure is different, log available keys
+							f.write(f'\n--- DOM Tree (no root key) ---\n')
+							f.write(f'available keys: {list(dom_tree.keys())[:10]}\n')
+							# Try to find root node elsewhere
+							for k, v in list(dom_tree.items())[:3]:
+								f.write(f'  {k}: {type(v).__name__}\n')
+					else:
+						f.write(f'\n--- DOM Tree (not a dict) ---\n')
+						f.write(f'type: {type(dom_tree).__name__}\n')
+
+					# AX tree summary
+					ax_nodes = data.get('ax_tree', {}).get('nodes', [])
+					f.write(f'\n--- AX Tree ({len(ax_nodes)} nodes) ---\n')
+					# Sample first 5 AX nodes
+					for i, ax_node in enumerate(ax_nodes[:5]):
+						f.write(f'  [{i}] backendDOMNodeId={ax_node.get("backendDOMNodeId")}, ')
+						f.write(f'role={ax_node.get("role")}, name={ax_node.get("name")}\n')
+					if len(ax_nodes) > 5:
+						f.write(f'  ... and {len(ax_nodes) - 5} more nodes\n')
+
+					# Snapshot summary
+					snapshot = data.get('snapshot', {})
+					docs = snapshot.get('documents', [])
+					f.write(f'\n--- Snapshot ({len(docs)} frames) ---\n')
+					for doc_idx, doc in enumerate(docs[:3]):
+						node_count = len(doc.get('nodes', {}).get('nodeNames', []))
+						layout_count = len(doc.get('layout', {}).get('nodeIndex', []))
+						f.write(f'  Frame {doc_idx}: {node_count} nodes, {layout_count} layout nodes\n')
+					if len(docs) > 3:
+						f.write(f'  ... and {len(docs) - 3} more frames\n')
+
+				elif phase == 'merge_complete':
+					# Log merge result summary
+					enhanced_node = data
+					f.write(f'node_id={enhanced_node.node_id}, backend_node_id={enhanced_node.backend_node_id}\n')
+					f.write(f'node_name={enhanced_node.node_name}, tag_name={enhanced_node.tag_name}\n')
+					if enhanced_node.ax_node:
+						f.write(f'AX: role={enhanced_node.ax_node.role}, name={enhanced_node.ax_node.name}\n')
+					if enhanced_node.snapshot_node:
+						f.write(f'Snapshot: is_clickable={enhanced_node.snapshot_node.is_clickable}, ')
+						f.write(f'cursor={enhanced_node.snapshot_node.cursor_style}\n')
+						if enhanced_node.snapshot_node.computed_styles:
+							styles = dict(list(enhanced_node.snapshot_node.computed_styles.items())[:10])
+							f.write(f'  styles: {styles}\n')
+
+				elif phase == 'serialized':
+					# Log serialized result
+					serialized_str = data
+					f.write(f'Serialized length: {len(serialized_str)} chars\n')
+					f.write(f'\n--- LLM Representation (first 3000 chars) ---\n')
+					f.write(serialized_str[:3000])
+					if len(serialized_str) > 3000:
+						f.write(f'\n... (truncated, total {len(serialized_str)} chars)')
+					f.write(f'\n')
+
+		except Exception as e:
+			self.logger.debug(f'Failed to write CDP log: {e}')
 
 	def _count_hidden_elements_in_iframes(self, node: EnhancedDOMTreeNode) -> None:
 		"""Collect hidden interactive elements in iframes for LLM hints.
@@ -644,7 +742,23 @@ class DomService:
 
 		snapshot_processing_ms = (time.time() - start_snapshot_processing) * 1000
 
-		# Return with detailed timing breakdown
+		# ===== DEBUG: CDP 三路并发调用结果日志 =====
+		self.logger.debug(
+			f'CDP 三路并发完成 ({cdp_calls_ms:.1f}ms): '
+			f'DOM树节点={dom_tree.get("root", {}).get("nodeId", "N/A")}, '
+			f'AX树节点数={len(ax_tree.get("nodes", []))}, '
+			f'Snapshot帧数={len(snapshot.get("documents", []))}'
+		)
+
+		# Write CDP results to local log file
+		self._log_cdp_data('cdp_results', {
+			'dom_tree': dom_tree,
+			'ax_tree': ax_tree,
+			'snapshot': snapshot,
+			'device_pixel_ratio': device_pixel_ratio,
+		})
+
+		# 返回 with detailed timing breakdown
 		return TargetAllTrees(
 			snapshot=snapshot,
 			dom_tree=dom_tree,
@@ -1036,6 +1150,9 @@ class DomService:
 		if get_dom_tree_overhead_ms > 0.1:
 			timing_info['get_dom_tree_overhead_ms'] = get_dom_tree_overhead_ms
 
+		# Write merge complete log for first few nodes
+		self._log_cdp_data('merge_complete', enhanced_dom_tree_node)
+
 		return enhanced_dom_tree_node, timing_info
 
 	@observe_debug(ignore_input=True, ignore_output=True, name='get_serialized_dom_tree')
@@ -1092,6 +1209,10 @@ class DomService:
 		get_serialized_overhead_ms = total_get_serialized_dom_tree_ms - tracked_major_operations_ms
 		if get_serialized_overhead_ms > 0.1:
 			timing_info['get_serialized_dom_tree_overhead_ms'] = get_serialized_overhead_ms
+
+		# Write serialized result to local log file
+		llm_repr = serialized_dom_state.llm_representation()
+		self._log_cdp_data('serialized', llm_repr)
 
 		return serialized_dom_state, enhanced_dom_tree, timing_info
 

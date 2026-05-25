@@ -47,16 +47,16 @@ async def main() -> None:
 	logger.info('Browser created (extensions disabled)')
 
 	agent = Agent(
-		task='Browse YouTube and find any introduction videos about browser use agents',
+		task='帮我在bilibili搜索有关agent的视频',
 		llm=llm,
 		browser=browser,
 		use_vision=True,
-		max_actions_per_step=1,
+		max_actions_per_step=2,
 		demo_mode=True,
 	)
 	logger.info('Agent created, starting run')
 
-	result = await agent.run(max_steps=10)
+	result = await agent.run(max_steps=20)
 	logger.info('Agent run completed with result: %s', result)
 
 

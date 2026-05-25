@@ -7,6 +7,7 @@ import re
 import tempfile
 import time
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
 from urllib.parse import urlparse
@@ -1187,6 +1188,9 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 		self.state.last_model_output = model_output
 
+		# Write LLM output to local log file
+		self._write_llm_output_log(model_output)
+
 		# Check again for paused/stopped state after getting model output
 		await self._check_stop_or_pause()
 
@@ -2084,6 +2088,46 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 			param_str = f'({", ".join(param_summary)})' if param_summary else ''
 			action_details.append(f'{action_name}{param_str}')
+
+	def _write_llm_output_log(self, model_output: 'AgentOutput') -> None:
+		"""Write LLM output to local log file for debugging."""
+		try:
+			log_dir = Path('/Users/hityu/Desktop/shizhan')
+			log_dir.mkdir(parents=True, exist_ok=True)
+			log_file = log_dir / 'llm_output_debug.log'
+
+			timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+			step_num = self.state.n_steps if hasattr(self.state, 'n_steps') else '?'
+
+			with open(log_file, 'a', encoding='utf-8') as f:
+				f.write(f'\n{"=" * 80}\n')
+				f.write(f'[{timestamp}] LLM Output (Step {step_num})\n')
+				f.write(f'{"=" * 80}\n\n')
+
+				# Write action(s)
+				if model_output.action:
+					f.write(f'--- Actions ({len(model_output.action)}) ---\n')
+					for i, action in enumerate(model_output.action):
+						action_data = action.model_dump(exclude_unset=True)
+						f.write(f'Action {i + 1}: {json.dumps(action_data, indent=2, ensure_ascii=False)}\n\n')
+
+				# Write current_state (thinking, evaluation, memory, next_goal)
+				if hasattr(model_output, 'current_state') and model_output.current_state:
+					f.write(f'--- Current State ---\n')
+					state = model_output.current_state
+					if hasattr(state, 'thinking') and state.thinking:
+						f.write(f'Thinking: {state.thinking}\n\n')
+					if hasattr(state, 'evaluation_previous_goal') and state.evaluation_previous_goal:
+						f.write(f'Eval: {state.evaluation_previous_goal}\n\n')
+					if hasattr(state, 'memory') and state.memory:
+						f.write(f'Memory: {state.memory}\n\n')
+					if hasattr(state, 'next_goal') and state.next_goal:
+						f.write(f'Next Goal: {state.next_goal}\n')
+
+				f.write(f'\n{"=" * 80}\n\n')
+
+		except Exception as e:
+			self.logger.debug(f'Failed to write LLM output log: {e}')
 
 	def _prepare_demo_message(self, message: str, limit: int = 600) -> str:
 		# Previously truncated long entries; keep full text for better context in demo panel

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 from browser_use.agent.message_manager.views import (
@@ -142,6 +144,7 @@ class MessageManager:
 		self.sensitive_data = sensitive_data
 		self.last_input_messages = []
 		self.last_state_message_text: str | None = None
+		self._last_step_info = None
 		# Only initialize messages if state is empty
 		if len(self.state.history.get_messages()) == 0:
 			self._set_message_with_type(self.system_prompt, 'system')
@@ -501,8 +504,75 @@ class MessageManager:
 		# Store state message text for history
 		self.last_state_message_text = state_message.text
 
+		# Store step info for logging
+		self._last_step_info = step_info
+
+		# Write complete state message to local log file
+		self._write_llm_input_log()
+
 		# Set the state message with caching enabled
 		self._set_message_with_type(state_message, 'state')
+
+	def _write_llm_input_log(self) -> None:
+		"""Write the complete LLM input to local log file for debugging."""
+		try:
+			log_dir = Path('/Users/hityu/Desktop/shizhan')
+			log_dir.mkdir(parents=True, exist_ok=True)
+			log_file = log_dir / 'llm_input_debug.log'
+
+			timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+
+			# Get all messages
+			messages = self.state.history.get_messages()
+
+			# Build step context from step_info
+			step_context = ''
+			if self._last_step_info:
+				step_context = f' (Step {self._last_step_info.step_number + 1}/{self._last_step_info.max_steps})'
+
+			with open(log_file, 'a', encoding='utf-8') as f:
+				f.write(f'\n{"=" * 80}\n')
+				f.write(f'[{timestamp}] LLM Input Messages{step_context} (total: {len(messages)} messages)\n')
+				f.write(f'{"=" * 80}\n\n')
+
+				for i, msg in enumerate(messages):
+					f.write(f'--- Message {i + 1} [{msg.__class__.__name__}] ---\n')
+
+					# Handle content that may be string or list
+					if isinstance(msg.content, str):
+						f.write(msg.content)
+					elif isinstance(msg.content, list):
+						for part in msg.content:
+							try:
+								text = getattr(part, 'text', None)
+								if isinstance(text, str):
+									f.write(text)
+								else:
+									img_url = getattr(getattr(part, 'image_url', None), 'url', '')
+									if img_url:
+										f.write(f'[Image: {str(img_url)[:80]}...]')
+							except Exception:
+								f.write(f'[{part.__class__.__name__}]')
+					f.write('\n\n')
+
+				f.write(f'\n--- End of Messages ---\n')
+				total_chars = 0
+				for msg in messages:
+					if isinstance(msg.content, str):
+						total_chars += len(msg.content)
+					elif isinstance(msg.content, list):
+						for part in msg.content:
+							try:
+								text = getattr(part, 'text', None)
+								if isinstance(text, str):
+									total_chars += len(text)
+							except Exception:
+								pass
+				f.write(f'Total content length: {total_chars} chars\n')
+				f.write(f'\n{"=" * 80}\n\n')
+
+		except Exception as e:
+			logger.debug(f'Failed to write LLM input log: {e}')
 
 	def _log_history_lines(self) -> str:
 		"""Generate a formatted log string of message history for debugging / printing to terminal"""
